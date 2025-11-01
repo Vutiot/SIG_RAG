@@ -1,0 +1,486 @@
+{
+  "agent_name": "loire_bretagne_scraper",
+  "version": "1.0",
+  "description": "Playbook exhaustif pour collecter données & documents pour RAG Gestion Territoriale – Bassin Loire‑Bretagne.",
+  "globals": {
+    "user_agent": "LB-RAG-Agent/1.0 (+contact: you@example.com)",
+    "concurrency": 4,
+    "retry": {
+      "tries": 5,
+      "backoff_seconds": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ]
+    },
+    "timeout_seconds": 45,
+    "storage": {
+      "raw_dir": "raw/",
+      "processed_dir": "processed/",
+      "metadata_file": "metadata/harvest_log.jsonl"
+    }
+  },
+  "rate_limits": [
+    {
+      "domain": "hubeau.eaufrance.fr",
+      "max_rps": 5
+    },
+    {
+      "domain": "eau-loire-bretagne.fr",
+      "max_rps": 2
+    },
+    {
+      "domain": "donnees-documents.eau-loire-bretagne.fr",
+      "max_rps": 2
+    },
+    {
+      "domain": "data.gouv.fr",
+      "max_rps": 2
+    },
+    {
+      "domain": "geoservices.ign.fr",
+      "max_rps": 2
+    },
+    {
+      "domain": "sandre.eaufrance.fr",
+      "max_rps": 2
+    },
+    {
+      "domain": "centre-val-de-loire.developpement-durable.gouv.fr",
+      "max_rps": 2
+    }
+  ],
+  "sources": [
+    {
+      "id": "hubeau_qualite_rivieres_v2",
+      "type": "api",
+      "base_url": "https://hubeau.eaufrance.fr/api/v2/qualite_rivieres",
+      "docs": "https://hubeau.eaufrance.fr/page/api-qualite-cours-deau",
+      "operations": [
+        {
+          "name": "station_pc",
+          "url": "/station_pc",
+          "params_core": [
+            "code_commune",
+            "bbox",
+            "code_masse_eau",
+            "size",
+            "page"
+          ],
+          "purpose": "Lister stations physico-chimiques proches d’une commune/zone pour rattacher analyses.",
+          "pagination": {
+            "type": "page+size",
+            "max_depth": 20000
+          }
+        },
+        {
+          "name": "operation_pc",
+          "url": "/operation_pc",
+          "params_core": [
+            "code_station",
+            "date_debut_prelevement",
+            "date_fin_prelevement",
+            "size",
+            "page"
+          ],
+          "purpose": "Lister opérations de prélèvement (contexte/conditions).",
+          "pagination": {
+            "type": "page+size",
+            "max_depth": 20000
+          }
+        },
+        {
+          "name": "condition_environnementale_pc",
+          "url": "/condition_environnementale_pc",
+          "params_core": [
+            "code_operation",
+            "size",
+            "page"
+          ],
+          "purpose": "Récupérer conditions environnementales des prélèvements.",
+          "pagination": {
+            "type": "page+size",
+            "max_depth": 20000
+          }
+        },
+        {
+          "name": "analyse_pc",
+          "url": "/analyse_pc",
+          "params_core": [
+            "code_parametre",
+            "libelle_parametre",
+            "code_station",
+            "code_commune",
+            "date_min_prelevement",
+            "date_max_prelevement",
+            "size",
+            "page"
+          ],
+          "purpose": "Résultats analyses physico-chimiques (NO3, PO4, turbidité, pesticides, etc.).",
+          "pagination": {
+            "type": "page+size",
+            "max_depth": 20000
+          },
+          "hints": [
+            "Utiliser fields= pour limiter le payload",
+            "Découper par année/paramètre pour rester sous la profondeur max"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hubeau_hydrometrie_v2",
+      "type": "api",
+      "base_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie",
+      "docs": "https://hubeau.eaufrance.fr/page/api-hydrometrie",
+      "operations": [
+        {
+          "name": "referentiel/sites",
+          "url": "/referentiel/sites",
+          "params_core": [
+            "code_commune_site",
+            "code_bassin",
+            "bbox",
+            "size",
+            "page"
+          ],
+          "purpose": "Lister sites (agrégation de stations) pour contexte hydrologique."
+        },
+        {
+          "name": "referentiel/stations",
+          "url": "/referentiel/stations",
+          "params_core": [
+            "code_commune_station",
+            "code_site",
+            "bbox",
+            "size",
+            "page"
+          ],
+          "purpose": "Lister stations hydrométriques (H/Q)."
+        },
+        {
+          "name": "observations_tr",
+          "url": "/observations_tr",
+          "params_core": [
+            "code_station",
+            "date_debut_obs",
+            "date_fin_obs",
+            "size",
+            "cursor"
+          ],
+          "purpose": "Observations temps réel (H, Q) – historique limité 1 mois.",
+          "pagination": {
+            "type": "cursor"
+          }
+        },
+        {
+          "name": "obs_elab",
+          "url": "/obs_elab",
+          "params_core": [
+            "code_station",
+            "code_site",
+            "grandeur_hydro",
+            "date_debut_obs",
+            "date_fin_obs",
+            "size",
+            "page"
+          ],
+          "purpose": "Observations élaborées (QmnJ, QmM, HIXnJ, HIXM, QIXnJ, QIXM, QINnJ, QINM) – historique complet."
+        }
+      ]
+    },
+    {
+      "id": "hubeau_qualite_nappes_v1",
+      "type": "api",
+      "base_url": "https://hubeau.eaufrance.fr/api/v1/qualite_nappes",
+      "docs": "https://hubeau.eaufrance.fr/page/api-qualite-nappes",
+      "operations": [
+        {
+          "name": "stations",
+          "url": "/stations",
+          "params_core": [
+            "bss_id",
+            "code_commune",
+            "bbox",
+            "size",
+            "page"
+          ],
+          "purpose": "Points d’eau/forages/sources – métadonnées."
+        },
+        {
+          "name": "analyses",
+          "url": "/analyses",
+          "params_core": [
+            "bss_id",
+            "code_commune",
+            "code_parametre",
+            "date_debut_prelevement",
+            "date_fin_prelevement",
+            "size",
+            "page"
+          ],
+          "purpose": "Résultats d’analyses physico-chimiques nappes (complément qualité)."
+        }
+      ]
+    },
+    {
+      "id": "admin_express_communes",
+      "type": "download",
+      "docs": "https://geoservices.ign.fr/adminexpress",
+      "resources": [
+        {
+          "name": "Communes (GeoJSON)",
+          "url": "https://www.data.gouv.fr/datasets/communes-cantons-et-epci-2025-admin-express-cog-plus-ign/",
+          "purpose": "Référentiel INSEE + géométries pour jointures & agrégations.",
+          "format": [
+            "GeoJSON",
+            "Parquet",
+            "TopoJSON"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bd_topage_troncons",
+      "type": "download",
+      "docs": "https://www.data.gouv.fr/datasets/troncons-hydrographiques-metropole-2024-bd-topage-r",
+      "resources": [
+        {
+          "name": "Tronçons hydro – GeoJSON/SHAPE",
+          "url": "https://www.data.gouv.fr/datasets/troncons-hydrographiques-metropole-2024-bd-topage-r/",
+          "purpose": "Graphe hydro pour calcul amont/aval, rattachement stations/versants."
+        }
+      ]
+    },
+    {
+      "id": "roe_obstacles",
+      "type": "download",
+      "docs": "https://www.data.gouv.fr/datasets/obstacles-a-lecoulement/",
+      "resources": [
+        {
+          "name": "ROE – Shapefile/GeoJSON (métropole)",
+          "url": "https://www.sandre.eaufrance.fr/atlas/srv/api/records/070df464-73d3-4c00-be2f-93f2a97ef8f5",
+          "purpose": "Localisation barrages/seuils pour requêtes liées aux ouvrages."
+        }
+      ]
+    },
+    {
+      "id": "bsh_loire_bretagne_pdf",
+      "type": "web",
+      "docs": "https://www.centre-val-de-loire.developpement-durable.gouv.fr/bulletins-de-situation-hydrologique-bsh-du-bassin-r965.html",
+      "patterns": [
+        {
+          "name": "Index BSH",
+          "start_url": "https://www.centre-val-de-loire.developpement-durable.gouv.fr/bulletins-de-situation-hydrologique-bsh-du-bassin-r965.html",
+          "link_selector": "a[href$='.pdf']",
+          "follow_rules": {
+            "allow_domains": [
+              "centre-val-de-loire.developpement-durable.gouv.fr"
+            ]
+          },
+          "save_to": "raw/pdfs/bsh/",
+          "metadata": [
+            "title",
+            "href",
+            "text"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aelb_qualite_eaux_docs",
+      "type": "web",
+      "docs": "https://donnees-documents.eau-loire-bretagne.fr/home/qualite-des-eaux---informations-et-donnees.html",
+      "patterns": [
+        {
+          "name": "Liens documents Qualité des eaux",
+          "start_url": "https://donnees-documents.eau-loire-bretagne.fr/home/qualite-des-eaux---informations-et-donnees.html",
+          "link_selector": "a[href$='.pdf'], a[href*='/document/']",
+          "follow_rules": {
+            "allow_domains": [
+              "donnees-documents.eau-loire-bretagne.fr",
+              "agence.eau-loire-bretagne.fr"
+            ]
+          },
+          "save_to": "raw/pdfs/aelb/",
+          "metadata": [
+            "title",
+            "href",
+            "text"
+          ]
+        }
+      ]
+    }
+  ],
+  "schemas": {
+    "qualite_analyse": [
+      "code_station",
+      "libelle_station",
+      "code_commune",
+      "code_parametre",
+      "libelle_parametre",
+      "fraction_analysee",
+      "resultat",
+      "unite",
+      "date_prelevement",
+      "code_masse_eau"
+    ],
+    "hydrometrie_obs_elab": [
+      "code_site",
+      "code_station",
+      "grandeur_hydro",
+      "date_obs",
+      "resultat",
+      "unite"
+    ],
+    "roe_obstacle": [
+      "id_ouvrage",
+      "type_ouvrage",
+      "geometry",
+      "nom_cours_eau"
+    ],
+    "topage_troncon": [
+      "id_troncon",
+      "geometry",
+      "classif"
+    ],
+    "commune": [
+      "code_insee",
+      "nom",
+      "geometry"
+    ],
+    "pdf_index": [
+      "title",
+      "year",
+      "source",
+      "url",
+      "local_path",
+      "hash"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "t1",
+      "source": "admin_express_communes",
+      "action": "download_extract",
+      "output": "processed/geo/admin_express_communes.geojson"
+    },
+    {
+      "id": "t2",
+      "source": "bd_topage_troncons",
+      "action": "download_extract",
+      "output": "processed/geo/bd_topage_troncons.geojson"
+    },
+    {
+      "id": "t3",
+      "source": "roe_obstacles",
+      "action": "download_extract",
+      "output": "processed/geo/roe_obstacles.geojson"
+    },
+    {
+      "id": "t4",
+      "source": "hubeau_qualite_rivieres_v2",
+      "action": "api_harvest",
+      "params": {
+        "code_parametre": [
+          "NO3",
+          "TURB"
+        ],
+        "periods": [
+          "2015-01-01/2022-12-31",
+          "2023-01-01/2023-12-31"
+        ],
+        "by": "commune"
+      },
+      "output": "exports/parquet/qualite_rivieres.parquet"
+    },
+    {
+      "id": "t5",
+      "source": "hubeau_hydrometrie_v2",
+      "action": "api_harvest",
+      "params": {
+        "grandeur_hydro": [
+          "QmM",
+          "QmnJ"
+        ],
+        "periods": [
+          "2015-01-01/2025-12-31"
+        ]
+      },
+      "output": "exports/parquet/hydrometrie_obs_elab.parquet"
+    },
+    {
+      "id": "t6",
+      "source": "hubeau_qualite_nappes_v1",
+      "action": "api_harvest",
+      "params": {
+        "code_parametre": [
+          "NO3",
+          "TURB"
+        ],
+        "periods": [
+          "2015-01-01/2025-12-31"
+        ]
+      },
+      "output": "exports/parquet/qualite_nappes.parquet"
+    },
+    {
+      "id": "t7",
+      "source": "bsh_loire_bretagne_pdf",
+      "action": "crawl_download",
+      "output": "raw/pdfs/bsh/"
+    },
+    {
+      "id": "t8",
+      "source": "aelb_qualite_eaux_docs",
+      "action": "crawl_download",
+      "output": "raw/pdfs/aelb/"
+    },
+    {
+      "id": "t9",
+      "source": "aelb_qualite_eaux_docs",
+      "action": "pdf_parse_ocr",
+      "input": "raw/pdfs/aelb/",
+      "output": "processed/text/aelb/"
+    },
+    {
+      "id": "t10",
+      "source": "bsh_loire_bretagne_pdf",
+      "action": "pdf_parse_ocr",
+      "input": "raw/pdfs/bsh/",
+      "output": "processed/text/bsh/"
+    }
+  ],
+  "post_processing": [
+    {
+      "id": "pp1",
+      "action": "spatial_join",
+      "inputs": [
+        "exports/parquet/qualite_rivieres.parquet",
+        "processed/geo/admin_express_communes.geojson"
+      ],
+      "on": "nearest",
+      "output": "exports/parquet/qualite_commune.parquet"
+    },
+    {
+      "id": "pp2",
+      "action": "snap_to_troncon",
+      "inputs": [
+        "exports/parquet/qualite_rivieres.parquet",
+        "processed/geo/bd_topage_troncons.geojson"
+      ],
+      "buffer_m": 100,
+      "output": "exports/parquet/qualite_troncon.parquet"
+    },
+    {
+      "id": "pp3",
+      "action": "build_upstream_graph",
+      "inputs": [
+        "processed/geo/bd_topage_troncons.geojson"
+      ],
+      "output": "exports/json/topage_graph.json"
+    }
+  ]
+}
