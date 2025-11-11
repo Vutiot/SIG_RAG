@@ -2,3 +2,17 @@
 # Git worktrees (Crystal)
 /worktrees/
 /worktree-*/
+
+# Data directories
+/scrapping/raw/
+/scrapping/processed/
+/scrapping/exports/
+/scrapping/logs/
+/scrapping/metadata/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
