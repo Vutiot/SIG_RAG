@@ -271,6 +271,7 @@ class APIClient(BaseScraper):
                 if e.response.status_code == 400 and page > 1:
                     self.logger.warning(
                         "Hit API pagination limit, stopping gracefully",
+                        threshold_type="api_pagination_limit",
                         page=page,
                         total_results=len(all_results)
                     )
@@ -293,12 +294,34 @@ class APIClient(BaseScraper):
             )
 
             # Check stopping conditions
-            if len(results) < default_size or len(all_results) >= max_depth:
+            if len(all_results) >= max_depth:
+                self.logger.warning(
+                    "Pagination limit reached",
+                    threshold_type="max_records",
+                    threshold_value=max_depth,
+                    records_fetched=len(all_results),
+                    page=page
+                )
+                break
+            elif len(results) < default_size:
                 break
 
             page += 1
 
-        self.logger.info("Pagination complete", total_results=len(all_results))
+        # Check for 20k record threshold (API pagination limit indicator)
+        if len(all_results) >= 20000:
+            self.logger.warning(
+                "Hit 20k record threshold",
+                threshold_type="record_limit_20k",
+                threshold_value=20000,
+                records_fetched=len(all_results),
+                pages_fetched=page
+            )
+
+        self.logger.info(
+            "Pagination complete",
+            total_results=len(all_results)
+        )
         return all_results
 
     def _paginate_cursor(

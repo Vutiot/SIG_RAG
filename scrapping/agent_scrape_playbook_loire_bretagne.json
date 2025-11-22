@@ -1,7 +1,7 @@
 {
   "agent_name": "loire_bretagne_scraper",
-  "version": "1.0",
-  "description": "Playbook exhaustif pour collecter données & documents pour RAG Gestion Territoriale – Bassin Loire‑Bretagne.",
+  "version": "1.1",
+  "description": "Playbook exhaustif pour collecter données & documents pour RAG Gestion Territoriale – Bassin Loire‑Bretagne. Supports iteration_mode parameter for API tasks: 'yearly' (fast, may hit limits), 'monthly' (balanced - RECOMMENDED), or 'daily' (slow, avoids all limits).",
   "globals": {
     "user_agent": "LB-RAG-Agent/1.0 (+contact: you@example.com)",
     "concurrency": 4,
@@ -392,7 +392,8 @@
           "2015-01-01/2022-12-31",
           "2023-01-01/2023-12-31"
         ],
-        "by": "commune"
+        "by": "commune",
+        "iteration_mode": "monthly"
       },
       "output": "exports/parquet/qualite_rivieres.parquet"
     },
@@ -407,7 +408,8 @@
         ],
         "periods": [
           "2015-01-01/2025-12-31"
-        ]
+        ],
+        "iteration_mode": "monthly"
       },
       "output": "exports/parquet/hydrometrie_obs_elab.parquet"
     },
@@ -422,7 +424,9 @@
         ],
         "periods": [
           "2015-01-01/2025-12-31"
-        ]
+        ],
+        "nom_region": "Bretagne",
+        "iteration_mode": "monthly"
       },
       "output": "exports/parquet/qualite_nappes.parquet"
     },

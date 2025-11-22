@@ -375,6 +375,8 @@ class HubeauQualiteNappesAPI(APIClient):
         date_debut_prelevement: Optional[str] = None,
         date_fin_prelevement: Optional[str] = None,
         nom_region: Optional[str] = None,
+        code_circonscription_administrative_bassin: Optional[str] = None,
+        nom_circonscription_administrative_bassin: Optional[str] = None,
     ) -> List[Dict]:
         """Get groundwater quality analyses.
 
@@ -384,7 +386,9 @@ class HubeauQualiteNappesAPI(APIClient):
             code_parametre: Parameter code
             date_debut_prelevement: Start date (YYYY-MM-DD)
             date_fin_prelevement: End date (YYYY-MM-DD)
-            nom_region: Region name (e.g., "Bretagne") - if provided, uses region filter instead of daily iteration
+            nom_region: Region name (e.g., "Bretagne")
+            code_circonscription_administrative_bassin: Basin code (e.g., "04" for Loire-Bretagne)
+            nom_circonscription_administrative_bassin: Basin name (e.g., "Loire-Bretagne")
 
         Returns:
             List of analysis records
@@ -402,6 +406,10 @@ class HubeauQualiteNappesAPI(APIClient):
             params['date_fin_prelevement'] = date_fin_prelevement
         if nom_region:
             params['nom_region'] = nom_region
+        if code_circonscription_administrative_bassin:
+            params['code_circonscription_administrative_bassin'] = code_circonscription_administrative_bassin
+        if nom_circonscription_administrative_bassin:
+            params['nom_circonscription_administrative_bassin'] = nom_circonscription_administrative_bassin
 
         return self._paginate_page_size(
             endpoint='/analyses',
@@ -436,3 +444,52 @@ def export_to_parquet(data: List[Dict], output_path: Path) -> None:
         rows=len(df),
         columns=len(df.columns)
     )
+
+
+def filter_and_export_by_parameter(
+    data: List[Dict],
+    param_code: int,
+    param_name: str,
+    output_path: Path,
+    total_records: int
+) -> int:
+    """Filter data by parameter code and export to parquet.
+
+    Args:
+        data: List of all records (unfiltered)
+        param_code: Parameter code to filter by (e.g., 1340 for NO3)
+        param_name: Parameter name for logging (e.g., 'no3', 'turb')
+        output_path: Output file path for filtered data
+        total_records: Total number of records before filtering (for logging)
+
+    Returns:
+        Number of records after filtering
+    """
+    # Filter records by code_param column
+    filtered_data = [row for row in data if row.get('code_param') == param_code]
+
+    if not filtered_data:
+        logger.warning(
+            f"No {param_name.upper()} data found in results",
+            param_code=param_code,
+            total_records=total_records
+        )
+        return 0
+
+    # Export filtered data
+    export_to_parquet(filtered_data, output_path)
+
+    # Log filtering stats
+    filtered_count = len(filtered_data)
+    filter_pct = (filtered_count / total_records * 100) if total_records > 0 else 0
+
+    logger.info(
+        f"Filtered and saved {param_name.upper()} data",
+        param_code=param_code,
+        filtered_records=filtered_count,
+        total_records=total_records,
+        kept_percentage=f"{filter_pct:.2f}%",
+        output_path=str(output_path)
+    )
+
+    return filtered_count

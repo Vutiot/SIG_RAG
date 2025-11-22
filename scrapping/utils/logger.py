@@ -3,6 +3,7 @@
 Logs are written in JSONL format to metadata/harvest_log.jsonl with the following structure:
 - timestamp: ISO 8601 timestamp
 - level: log level (INFO, WARNING, ERROR, etc.)
+- run_id: unique identifier for the execution run
 - task_id: identifier for the task being executed
 - source_id: data source identifier
 - message: log message
@@ -38,6 +39,8 @@ class JSONLHandler(logging.Handler):
             }
 
             # Add extra fields if present
+            if hasattr(record, 'run_id'):
+                log_entry['run_id'] = record.run_id
             if hasattr(record, 'task_id'):
                 log_entry['task_id'] = record.task_id
             if hasattr(record, 'source_id'):
@@ -116,7 +119,8 @@ def setup_logger(
 def get_logger(
     name: str,
     task_id: Optional[str] = None,
-    source_id: Optional[str] = None
+    source_id: Optional[str] = None,
+    run_id: Optional[str] = None
 ) -> structlog.BoundLogger:
     """Get a logger instance with optional context.
 
@@ -124,12 +128,15 @@ def get_logger(
         name: Logger name (typically __name__)
         task_id: Optional task identifier
         source_id: Optional data source identifier
+        run_id: Optional run identifier (unique per execution)
 
     Returns:
         Configured structlog logger with bound context
     """
     logger = structlog.get_logger(name)
 
+    if run_id:
+        logger = logger.bind(run_id=run_id)
     if task_id:
         logger = logger.bind(task_id=task_id)
     if source_id:
